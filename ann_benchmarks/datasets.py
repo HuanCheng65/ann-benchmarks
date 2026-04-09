@@ -597,6 +597,13 @@ def coco(out_fn: str, kind: str):
     write_output(X_train, X_test, out_fn, "angular")
 
 
+def external_hdf5_dataset(out_fn: str) -> None:
+    raise RuntimeError(
+        f"Expected prebuilt dataset at {out_fn}. "
+        "Generate it first with scripts/convert_sift100m_to_hdf5.py"
+    )
+
+
 DATASETS: Dict[str, Callable[[str], None]] = {
     "deep-image-96-angular": deep_image,
     "fashion-mnist-784-euclidean": fashion_mnist,
@@ -616,6 +623,7 @@ DATASETS: Dict[str, Callable[[str], None]] = {
     "random-s-jaccard": lambda out_fn: random_jaccard(out_fn, n=10000, size=20, universe=40),
     "random-l-jaccard": lambda out_fn: random_jaccard(out_fn, n=100000, size=70, universe=100),
     "sift-128-euclidean": sift,
+    "sift100m-128-euclidean": external_hdf5_dataset,
     "nytimes-256-angular": lambda out_fn: nytimes(out_fn, 256),
     "nytimes-16-angular": lambda out_fn: nytimes(out_fn, 16),
     "word2bits-800-hamming": lambda out_fn: word2bits(out_fn, "400K", "w2b_bitlevel1_size800_vocab400K"),
