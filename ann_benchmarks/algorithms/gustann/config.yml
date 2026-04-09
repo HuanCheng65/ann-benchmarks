@@ -1,0 +1,49 @@
+float:
+  euclidean:
+  - base_args:
+      - '@metric'
+    constructor: Gustann
+    disabled: true
+    docker_tag: ann-benchmarks-gustann
+    module: ann_benchmarks.algorithms.gustann
+    name: gustann-mem
+    run_groups:
+      baseline:
+        arg_groups:
+          - index_params:
+              gustann_home: ../gustann-mem
+              pq_size: 32
+              search_memory_gb: 4
+              build_memory_gb: 16
+              max_degree: 128
+              l_build: 200
+              pivot_sample_size: 1000000
+              pivot_graph_degree: 32
+              pivot_graph_l_build: 50
+            search_params:
+              - minibatch: 1
+                cache_pct: 0
+                blocks_per_sm: 1
+                pipeline_width: 0
+                ef_search: 40
+              - minibatch: 32
+                cache_pct: 0
+                blocks_per_sm: 1
+                pipeline_width: 0
+                ef_search: 40
+              - minibatch: 256
+                cache_pct: 0
+                blocks_per_sm: 1
+                pipeline_width: 0
+                ef_search: 40
+              - minibatch: 2048
+                cache_pct: 0
+                blocks_per_sm: 1
+                pipeline_width: 0
+                ef_search: 40
+              - minibatch: 10000
+                cache_pct: 0
+                blocks_per_sm: 1
+                pipeline_width: 0
+                ef_search: 40
+        query_args: [[20, 30, 40, 50, 80, 100]]

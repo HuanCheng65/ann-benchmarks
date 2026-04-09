@@ -2,6 +2,7 @@ import json
 import os
 import re
 import traceback
+import hashlib
 from typing import Any, Optional, Set, Tuple, Iterator
 import h5py
 
@@ -34,7 +35,11 @@ def build_result_filepath(dataset_name: Optional[str] = None,
     if definition:
         d.append(definition.algorithm + ("-batch" if batch_mode else ""))
         data = definition.arguments + query_arguments
-        d.append(re.sub(r"\W+", "_", json.dumps(data, sort_keys=True)).strip("_") + ".hdf5")
+        stem = re.sub(r"\W+", "_", json.dumps(data, sort_keys=True)).strip("_")
+        if len(stem) > 180:
+            digest = hashlib.sha256(stem.encode("utf-8")).hexdigest()[:16]
+            stem = f"{stem[:120]}_{digest}"
+        d.append(stem + ".hdf5")
     return os.path.join(*d)
 
 
