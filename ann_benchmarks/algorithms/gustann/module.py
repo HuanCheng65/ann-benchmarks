@@ -75,37 +75,30 @@ class Gustann(BaseANN):
         X = np.ascontiguousarray(X)
         search_bin = "search_disk_mem_uint8" if self._data_type == "uint8" else "search_disk_mem_float"
         requested_minibatch = int(self._search_params.get("minibatch", 0))
-        chunk_size = len(X) if requested_minibatch <= 0 else min(requested_minibatch, len(X))
-        all_results = []
+        batch_size = len(X) if requested_minibatch <= 0 else min(requested_minibatch, len(X))
+        query_file = self._workdir / "queries_0000.bin"
+        output_ids = self._workdir / "result_ids_0000.bin"
+        self._write_diskann_bin(query_file, X)
+        if output_ids.exists():
+            output_ids.unlink()
 
-        for chunk_id, start in enumerate(range(0, len(X), chunk_size)):
-            stop = min(start + chunk_size, len(X))
-            chunk = X[start:stop]
-            query_file = self._workdir / f"queries_{chunk_id:04d}.bin"
-            output_ids = self._workdir / f"result_ids_{chunk_id:04d}.bin"
-            self._write_diskann_bin(query_file, chunk)
-            if output_ids.exists():
-                output_ids.unlink()
+        cmd = [
+            str(self._gustann_home / f"build/bin/{search_bin}"),
+            "--index-dir", str(self._index_prefix),
+            "--query", str(query_file),
+            "--output_ids", str(output_ids),
+            "--topk", str(n),
+            "--ef_search", str(self._query_params.get("ef_search", self._search_params["ef_search"])),
+            "--cache_pct_list", str(self._search_params.get("cache_pct", 0)),
+            "--blocks_per_sm_list", str(self._search_params.get("blocks_per_sm", 1)),
+            "--batch_size_list", str(batch_size),
+        ]
+        pipeline_width = int(self._search_params.get("pipeline_width", 0))
+        if pipeline_width:
+            cmd.extend(["--pipeline_width", str(pipeline_width)])
 
-            cmd = [
-                str(self._gustann_home / f"build/bin/{search_bin}"),
-                "--index-dir", str(self._index_prefix),
-                "--query", str(query_file),
-                "--output_ids", str(output_ids),
-                "--topk", str(n),
-                "--ef_search", str(self._query_params.get("ef_search", self._search_params["ef_search"])),
-                "--cache_pct_list", str(self._search_params.get("cache_pct", 0)),
-                "--blocks_per_sm_list", str(self._search_params.get("blocks_per_sm", 1)),
-                "--batch_size_list", str(len(chunk)),
-            ]
-            pipeline_width = int(self._search_params.get("pipeline_width", 0))
-            if pipeline_width:
-                cmd.extend(["--pipeline_width", str(pipeline_width)])
-
-            self._run(cmd, cwd=self._gustann_home)
-            all_results.extend(self._read_ids(output_ids, n))
-
-        self._batch_results = all_results
+        self._run(cmd, cwd=self._gustann_home)
+        self._batch_results = self._read_ids(output_ids, n)
 
     def get_batch_results(self):
         return self._batch_results
