@@ -59,6 +59,7 @@ class Gustann(BaseANN):
             self._run_nav_build(base_bin, nav_prefix, data_type, X.shape[0])
 
         self._index_file = index_file
+        self._index_prefix = index_prefix
         self._pq_prefix = pq_prefix
         self._index_dir = self._workdir
         self._refresh_name()
@@ -88,7 +89,7 @@ class Gustann(BaseANN):
 
             cmd = [
                 str(self._gustann_home / f"build/bin/{search_bin}"),
-                "--index-dir", str(self._index_dir),
+                "--index-dir", str(self._index_prefix),
                 "--query", str(query_file),
                 "--output_ids", str(output_ids),
                 "--topk", str(n),
