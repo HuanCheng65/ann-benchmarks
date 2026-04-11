@@ -19,7 +19,7 @@ def norm(a):
 
 
 def euclidean(a, b):
-    return norm(a - b)
+    return norm(a.astype(np.float32) - b.astype(np.float32))
 
 class Metric(NamedTuple):
     distance: Callable[[np.ndarray, np.ndarray], float]

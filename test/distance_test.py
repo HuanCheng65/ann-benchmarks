@@ -13,6 +13,14 @@ def test_euclidean():
     assert dist(p, q) == pytest.approx(5**0.5)
 
 
+def test_euclidean_uint8_matches_numeric_distance():
+    dist = metrics["euclidean"].distance
+
+    p = numpy.array([0, 0], dtype=numpy.uint8)
+    q = numpy.array([255, 0], dtype=numpy.uint8)
+    assert dist(p, q) == pytest.approx(255.0)
+
+
 def test_hamming():
     dist = metrics["hamming"].distance
 
