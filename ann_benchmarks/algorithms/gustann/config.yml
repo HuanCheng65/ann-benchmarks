@@ -21,12 +21,7 @@ float:
               pivot_graph_degree: 32
               pivot_graph_l_build: 50
             search_params:
-              - minibatch: 1
-                cache_pct: 0
-                blocks_per_sm: 1
-                pipeline_width: 0
-                ef_search: 40
-              - minibatch: 32
+              - minibatch: 64
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
@@ -36,7 +31,7 @@ float:
                 blocks_per_sm: 1
                 pipeline_width: 0
                 ef_search: 40
-              - minibatch: 2048
+              - minibatch: 1024
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
@@ -46,7 +41,7 @@ float:
                 blocks_per_sm: 1
                 pipeline_width: 0
                 ef_search: 40
-        query_args: [[20, 30, 40, 50, 80, 100]]
+        query_args: [[20, 30, 40, 50, 60, 80, 100]]
 uint8:
   euclidean:
   - base_args:
@@ -70,12 +65,7 @@ uint8:
               pivot_graph_degree: 32
               pivot_graph_l_build: 50
             search_params:
-              - minibatch: 1
-                cache_pct: 0
-                blocks_per_sm: 1
-                pipeline_width: 0
-                ef_search: 40
-              - minibatch: 32
+              - minibatch: 64
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
@@ -85,7 +75,7 @@ uint8:
                 blocks_per_sm: 1
                 pipeline_width: 0
                 ef_search: 40
-              - minibatch: 2048
+              - minibatch: 1024
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
@@ -95,4 +85,4 @@ uint8:
                 blocks_per_sm: 1
                 pipeline_width: 0
                 ef_search: 40
-        query_args: [[20, 30, 40, 50, 80, 100]]
+        query_args: [[20, 30, 40, 50, 60, 80, 100]]
