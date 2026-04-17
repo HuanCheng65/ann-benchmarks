@@ -11,7 +11,7 @@ RUN apt-get update
 RUN apt-get install -y temurin-20-jdk temurin-17-jdk
 
 # Install PyLucene & JCC
-RUN wget https://dlcdn.apache.org/lucene/pylucene/pylucene-9.7.0-src.tar.gz
+RUN wget https://archive.apache.org/dist/lucene/pylucene/pylucene-9.7.0-src.tar.gz
 RUN tar -xzf pylucene-9.7.0-src.tar.gz
 ENV JCC_JDK=/usr/lib/jvm/temurin-20-jdk-amd64
 WORKDIR /home/app/pylucene-9.7.0/jcc
