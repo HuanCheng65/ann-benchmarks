@@ -624,6 +624,7 @@ DATASETS: Dict[str, Callable[[str], None]] = {
     "random-l-jaccard": lambda out_fn: random_jaccard(out_fn, n=100000, size=70, universe=100),
     "sift-128-euclidean": sift,
     "sift100m-128-euclidean": external_hdf5_dataset,
+    "sift100m-128-euclidean-float": external_hdf5_dataset,
     "nytimes-256-angular": lambda out_fn: nytimes(out_fn, 256),
     "nytimes-16-angular": lambda out_fn: nytimes(out_fn, 16),
     "word2bits-800-hamming": lambda out_fn: word2bits(out_fn, "400K", "w2b_bitlevel1_size800_vocab400K"),

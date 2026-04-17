@@ -7,6 +7,15 @@ import h5py
 import numpy as np
 
 
+def resolve_output_dtype(output_dtype: str | np.dtype) -> tuple[np.dtype, str]:
+    dtype = np.dtype(output_dtype)
+    if dtype == np.uint8:
+        return dtype, "uint8"
+    if dtype == np.float32:
+        return dtype, "float"
+    raise ValueError(f"Unsupported output dtype: {output_dtype}")
+
+
 def read_bin_header(path: Path) -> tuple[int, int]:
     with path.open("rb") as f:
         header = np.fromfile(f, dtype=np.int32, count=2)
@@ -37,6 +46,30 @@ def copy_dense_dataset(
         stop = min(start + rows_per_chunk, src.shape[0])
         dst[start:stop] = np.asarray(src[start:stop], dtype=dtype)
         print(f"{dataset_name}: copied rows [{start}, {stop})")
+
+
+def write_output_dataset(
+    output: Path,
+    train: np.ndarray,
+    test: np.ndarray,
+    neighbors: np.ndarray,
+    distances: np.ndarray,
+    output_dtype: str | np.dtype,
+    train_copy_chunk: int = 250_000,
+) -> None:
+    dtype, point_type = resolve_output_dtype(output_dtype)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    with h5py.File(output, "w") as h5:
+        h5.attrs["type"] = "dense"
+        h5.attrs["distance"] = "euclidean"
+        h5.attrs["dimension"] = int(train.shape[1])
+        h5.attrs["point_type"] = point_type
+
+        copy_dense_dataset(h5, "train", train, dtype, train_copy_chunk)
+        h5.create_dataset("test", data=np.asarray(test, dtype=dtype), dtype=dtype)
+        h5.create_dataset("neighbors", data=np.asarray(neighbors, dtype=np.int32), dtype=np.int32)
+        h5.create_dataset("distances", data=np.asarray(distances, dtype=np.float32), dtype=np.float32)
 
 
 def compute_gt_distances(
@@ -88,6 +121,12 @@ def parse_args() -> argparse.Namespace:
         default=100,
         help="How many ground-truth neighbors to keep",
     )
+    parser.add_argument(
+        "--output-dtype",
+        choices=["uint8", "float32"],
+        default="uint8",
+        help="Output dtype for train/test datasets in the HDF5 file",
+    )
     return parser.parse_args()
 
 
@@ -108,17 +147,15 @@ def main() -> None:
     gt_ids = gt_full[:, : args.neighbors]
     distances = compute_gt_distances(base, query, gt_ids, args.query_block_size)
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with h5py.File(args.output, "w") as h5:
-        h5.attrs["type"] = "dense"
-        h5.attrs["distance"] = "euclidean"
-        h5.attrs["dimension"] = int(base.shape[1])
-        h5.attrs["point_type"] = "uint8"
-
-        copy_dense_dataset(h5, "train", base, np.uint8, args.train_copy_chunk)
-        h5.create_dataset("test", data=np.asarray(query, dtype=np.uint8), dtype=np.uint8)
-        h5.create_dataset("neighbors", data=np.asarray(gt_ids, dtype=np.int32), dtype=np.int32)
-        h5.create_dataset("distances", data=distances, dtype=np.float32)
+    write_output_dataset(
+        args.output,
+        base,
+        query,
+        gt_ids,
+        distances,
+        np.float32 if args.output_dtype == "float32" else np.uint8,
+        train_copy_chunk=args.train_copy_chunk,
+    )
 
     print(f"wrote {args.output}")
     print(f"train={base.shape} test={query.shape} neighbors={gt_ids.shape}")
