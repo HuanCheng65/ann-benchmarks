@@ -3,8 +3,10 @@ from dataclasses import replace
 import h5py
 import logging
 import logging.config
+import multiprocessing
 import multiprocessing.pool
 import os
+import queue as queue_module
 import random
 import shutil
 import sys
@@ -48,7 +50,7 @@ def positive_int(input_str: str) -> int:
     return i
 
 
-def run_worker(cpu: int, mem_limit: int, args: argparse.Namespace, queue: multiprocessing.Queue) -> None:
+def run_worker(cpu: int, mem_limit: int, args: argparse.Namespace, task_queue: multiprocessing.Queue) -> None:
     """
     Executes the algorithm based on the provided parameters.
 
@@ -65,14 +67,36 @@ def run_worker(cpu: int, mem_limit: int, args: argparse.Namespace, queue: multip
     Returns:
         None
     """
-    while not queue.empty():
-        definition = queue.get()
-        if args.local:
-            run(definition, args.dataset, args.count, args.runs, args.batch)
-        else:
-            cpu_limit = str(cpu) if not args.batch else f"0-{multiprocessing.cpu_count() - 1}"
-            
-            run_docker(definition, args.dataset, args.count, args.runs, args.timeout, args.batch, cpu_limit, mem_limit)
+    worker_pid = os.getpid()
+    logger.info("worker pid=%s started on cpu_slot=%s", worker_pid, cpu)
+
+    while True:
+        try:
+            definition = task_queue.get_nowait()
+        except queue_module.Empty:
+            logger.info("worker pid=%s queue drained, exiting", worker_pid)
+            return
+
+        logger.info("worker pid=%s running definition=%s", worker_pid, definition)
+        try:
+            if args.local:
+                run(definition, args.dataset, args.count, args.runs, args.batch)
+            else:
+                cpu_limit = str(cpu) if not args.batch else f"0-{multiprocessing.cpu_count() - 1}"
+                run_docker(
+                    definition,
+                    args.dataset,
+                    args.count,
+                    args.runs,
+                    args.timeout,
+                    args.batch,
+                    cpu_limit,
+                    mem_limit,
+                )
+            logger.info("worker pid=%s finished definition=%s", worker_pid, definition)
+        except Exception:
+            logger.exception("worker pid=%s failed on definition=%s", worker_pid, definition)
+            raise
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -254,13 +278,23 @@ def create_workers_and_execute(definitions: List[Definition], args: argparse.Nam
     memory_margin = 500e6  # reserve some extra memory for misc stuff
     mem_limit = int((psutil.virtual_memory().available - memory_margin) / args.parallelism)
 
+    workers: List[multiprocessing.Process] = []
     try:
         workers = [multiprocessing.Process(target=run_worker, args=(i + 1, mem_limit, args, task_queue)) for i in range(args.parallelism)]
         [worker.start() for worker in workers]
         [worker.join() for worker in workers]
+
+        failed_workers = [worker for worker in workers if worker.exitcode not in (0, None)]
+        if failed_workers:
+            details = ", ".join(
+                f"pid={worker.pid} exitcode={worker.exitcode}" for worker in failed_workers
+            )
+            raise RuntimeError(f"One or more benchmark workers failed: {details}")
     finally:
         logger.info("Terminating %d workers" % len(workers))
-        [worker.terminate() for worker in workers]
+        for worker in workers:
+            if worker.is_alive():
+                worker.terminate()
 
 
 def filter_disabled_algorithms(definitions: List[Definition]) -> List[Definition]:
