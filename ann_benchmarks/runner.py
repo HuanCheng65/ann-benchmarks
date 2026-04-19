@@ -10,6 +10,7 @@ import colors
 import docker
 import numpy
 import psutil
+import h5py
 
 from ann_benchmarks.algorithms.base.module import BaseANN
 
@@ -17,6 +18,49 @@ from .definitions import Definition, instantiate_algorithm
 from .datasets import DATASETS, get_dataset
 from .distance import dataset_transform, metrics
 from .results import store_results
+
+
+class LazyHDF5Array:
+    def __init__(self, dataset: h5py.Dataset):
+        self._dataset = dataset
+        self.shape = dataset.shape
+        self.dtype = dataset.dtype
+
+    def __len__(self):
+        return int(self.shape[0])
+
+    def __getitem__(self, item):
+        value = self._dataset[item]
+        if isinstance(item, slice):
+            return numpy.asarray(value)
+        return numpy.asarray(value)
+
+    def __array__(self):
+        return numpy.asarray(self._dataset)
+
+
+class LazyU8BinArray:
+    def __init__(self, path: str, count: int, dims: int):
+        self._path = path
+        self.shape = (int(count), int(dims))
+        self.dtype = numpy.dtype(numpy.uint8)
+        self._memmap = numpy.memmap(
+            path,
+            dtype=numpy.uint8,
+            mode="r",
+            offset=8,
+            shape=self.shape,
+            order="C",
+        )
+
+    def __len__(self):
+        return int(self.shape[0])
+
+    def __getitem__(self, item):
+        return numpy.asarray(self._memmap[item])
+
+    def __array__(self):
+        return numpy.asarray(self._memmap)
 
 
 def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.array, distance: str, count: int, 
@@ -172,6 +216,43 @@ def load_and_transform_dataset(dataset_name: str) -> Tuple[
     return train, test, distance
 
 
+def load_and_transform_dataset_lazy(dataset_name: str) -> Tuple[
+        Union[numpy.ndarray, List[numpy.ndarray], LazyHDF5Array, LazyU8BinArray],
+        Union[numpy.ndarray, List[numpy.ndarray]],
+        str]:
+    D, dimension = get_dataset(dataset_name)
+    distance = D.attrs["distance"]
+    point_type = D.attrs.get("point_type", "float")
+
+    test_source = D["test"]
+    if "external_base_u8bin" in D.attrs:
+        train_shape = (
+            int(D.attrs["external_train_count"]),
+            int(D.attrs["external_train_dimension"]),
+        )
+        X_train = LazyU8BinArray(str(D.attrs["external_base_u8bin"]), *train_shape)
+    else:
+        train_source = D["train"]
+        use_lazy_train = (
+            dataset_name == "sift1b-128-euclidean"
+            or int(train_source.shape[0]) >= 100_000_000
+        )
+        X_train = LazyHDF5Array(train_source) if use_lazy_train else numpy.array(train_source)
+        train_shape = train_source.shape
+    X_test = numpy.array(test_source)
+
+    print(f"Got a train set of size ({train_shape[0]} * {dimension})")
+    print(f"Got {len(X_test)} queries")
+
+    if D.attrs.get("type", "dense") == "sparse":
+        train, test = dataset_transform(D)
+        return train, test, distance
+
+    if point_type == "float":
+        return X_train, X_test.astype(numpy.float32, copy=False), distance
+    return X_train, X_test.astype(numpy.uint8, copy=False), distance
+
+
 def build_index(algo: BaseANN, X_train: numpy.ndarray) -> Tuple:
     """Builds the ANN index for a given ANN algorithm on the training data.
 
@@ -212,7 +293,7 @@ error: query argument groups have been specified for {definition.module}.{defini
 algorithm instantiated from it does not implement the set_query_arguments \
 function"""
 
-    X_train, X_test, distance = load_and_transform_dataset(dataset_name)
+    X_train, X_test, distance = load_and_transform_dataset_lazy(dataset_name)
 
     try:
         if hasattr(algo, "supports_prepared_queries"):
