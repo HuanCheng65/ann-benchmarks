@@ -20,28 +20,30 @@ float:
               pivot_sample_size: 1000000
               pivot_graph_degree: 32
               pivot_graph_l_build: 50
+              host_register_mode: single_gpu_chunked_mapped
+              host_register_chunk_gb: 32
             search_params:
               - minibatch: 64
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
+                ef_search: 30
               - minibatch: 256
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
+                ef_search: 30
               - minibatch: 1024
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
+                ef_search: 30
               - minibatch: 10000
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
-        query_args: [[20, 30, 40, 50, 60, 80, 100]]
+                ef_search: 30
+        query_args: [[30]]
 uint8:
   euclidean:
   - base_args:
@@ -64,25 +66,27 @@ uint8:
               pivot_sample_size: 1000000
               pivot_graph_degree: 32
               pivot_graph_l_build: 50
+              host_register_mode: single_gpu_chunked_mapped
+              host_register_chunk_gb: 32
             search_params:
               - minibatch: 64
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
+                ef_search: 30
               - minibatch: 256
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
+                ef_search: 30
               - minibatch: 1024
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
+                ef_search: 30
               - minibatch: 10000
                 cache_pct: 0
                 blocks_per_sm: 1
                 pipeline_width: 0
-                ef_search: 40
-        query_args: [[20, 30, 40, 50, 60, 80, 100]]
+                ef_search: 30
+        query_args: [[30]]

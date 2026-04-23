@@ -22,15 +22,19 @@ class Gustann(GustannBase):
         batch_size = len(X) if requested_minibatch <= 0 else min(requested_minibatch, len(X))
         query_file = self._workdir / "queries_0000.bin"
         output_ids = self._workdir / "result_ids_0000.bin"
+        output_distances = self._workdir / "result_distances_0000.bin"
         self._write_diskann_bin(query_file, X)
         if output_ids.exists():
             output_ids.unlink(missing_ok=True)
+        if output_distances.exists():
+            output_distances.unlink(missing_ok=True)
 
         cmd = [
             str(self._gustann_home / f"build/bin/{search_bin}"),
             "--index-dir", str(self._index_prefix),
             "--query", str(query_file),
             "--output_ids", str(output_ids),
+            "--output_distances", str(output_distances),
             "--topk", str(n),
             "--ef_search_list", str(self._query_params.get("ef_search", self._search_params["ef_search"])),
             "--cache_pct_list", str(self._search_params.get("cache_pct", 0)),
@@ -38,6 +42,12 @@ class Gustann(GustannBase):
             "--blocks_per_sm_list", str(self._search_params.get("blocks_per_sm", 1)),
             "--batch_size_list", str(batch_size),
         ]
+        host_register_mode = self._index_params.get("host_register_mode")
+        if host_register_mode:
+            cmd.extend(["--host_register_mode", str(host_register_mode)])
+        host_register_chunk_gb = self._index_params.get("host_register_chunk_gb")
+        if host_register_chunk_gb is not None:
+            cmd.extend(["--host_register_chunk_gb", str(host_register_chunk_gb)])
         pipeline_width = int(self._search_params.get("pipeline_width", 0))
         if pipeline_width:
             cmd.extend(["--pipeline_width", str(pipeline_width)])
@@ -45,6 +55,7 @@ class Gustann(GustannBase):
         output = self._run(cmd, cwd=self._gustann_home)
         self._set_batch_latency_from_output(output, len(X))
         self._batch_results = self._read_ids(output_ids, n)
+        self._batch_distances = self._read_distances(output_distances, n)
         if len(self._batch_results) != len(X):
             raise RuntimeError(
                 f"Expected {len(X)} result rows from GustANN batch search, got {len(self._batch_results)}"

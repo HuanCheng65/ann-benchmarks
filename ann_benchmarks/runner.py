@@ -63,6 +63,64 @@ class LazyU8BinArray:
         return numpy.asarray(self._memmap)
 
 
+def compute_candidates_with_distances(
+    X_train: numpy.array,
+    X_test: numpy.array,
+    results: List[List[int]],
+    distance: str,
+) -> List[List[Tuple[int, float]]]:
+    unique_ids = sorted({int(idx) for row in results for idx in row})
+    if not unique_ids:
+        return [[] for _ in results]
+
+    train_batch = numpy.asarray(X_train[numpy.asarray(unique_ids, dtype=numpy.int64)])
+    id_to_pos = {idx: pos for pos, idx in enumerate(unique_ids)}
+    row_lengths = [len(row) for row in results]
+    flat_ids = numpy.asarray([int(idx) for row in results for idx in row], dtype=numpy.int64)
+    flat_query_ids = numpy.repeat(numpy.arange(len(results), dtype=numpy.int64), row_lengths)
+    flat_train = train_batch[numpy.asarray([id_to_pos[int(idx)] for idx in flat_ids], dtype=numpy.int64)]
+    flat_queries = numpy.asarray(X_test)[flat_query_ids]
+
+    if distance == "euclidean":
+        delta = flat_queries.astype(numpy.float32, copy=False) - flat_train.astype(numpy.float32, copy=False)
+        flat_distances = numpy.sqrt(numpy.sum(delta * delta, axis=1, dtype=numpy.float32))
+    elif distance == "angular":
+        q = flat_queries.astype(numpy.float32, copy=False)
+        t = flat_train.astype(numpy.float32, copy=False)
+        numerator = numpy.sum(q * t, axis=1, dtype=numpy.float32)
+        denominator = numpy.linalg.norm(q, axis=1) * numpy.linalg.norm(t, axis=1)
+        flat_distances = 1.0 - numpy.divide(
+            numerator,
+            denominator,
+            out=numpy.zeros_like(numerator),
+            where=denominator != 0,
+        )
+    elif distance == "hamming":
+        flat_distances = numpy.mean(
+            numpy.logical_xor(
+                flat_queries.astype(numpy.bool_, copy=False),
+                flat_train.astype(numpy.bool_, copy=False),
+            ),
+            axis=1,
+        )
+    else:
+        flat_distances = numpy.asarray(
+            [metrics[distance].distance(a, b) for a, b in zip(flat_queries, flat_train)],
+            dtype=numpy.float32,
+        )
+
+    candidates = []
+    offset = 0
+    for row in results:
+        row_size = len(row)
+        row_distances = flat_distances[offset : offset + row_size]
+        candidates.append(
+            [(int(idx), float(dist)) for idx, dist in zip(row, row_distances)]
+        )
+        offset += row_size
+    return candidates
+
+
 def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.array, distance: str, count: int, 
                          run_count: int, batch: bool) -> Tuple[dict, list]:
     """Run a search query using the provided algorithm and report the results.
@@ -114,9 +172,7 @@ def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.arra
             # make sure all returned indices are unique
             assert len(candidates) == len(set(candidates)), "Implementation returned duplicated candidates"
 
-            candidates = [
-                (int(idx), float(metrics[distance].distance(v, X_train[idx]))) for idx in candidates  # noqa
-            ]
+            candidates = compute_candidates_with_distances(X_train, numpy.asarray([v]), [candidates], distance)[0]
             n_items_processed[0] += 1
             if n_items_processed[0] % 1000 == 0:
                 print("Processed %d/%d queries..." % (n_items_processed[0], len(X_test)))
@@ -149,6 +205,7 @@ def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.arra
                 algo.batch_query(X, count)
                 total = time.time() - start
             results = algo.get_batch_results()
+            native_distances = algo.get_batch_distances() if hasattr(algo, "get_batch_distances") else None
             if hasattr(algo, "get_batch_latencies"):
                 batch_latencies = algo.get_batch_latencies()
             else:
@@ -158,10 +215,13 @@ def run_individual_query(algo: BaseANN, X_train: numpy.array, X_test: numpy.arra
             for res in results:
                 assert len(res) == len(set(res)), "Implementation returned duplicated candidates"
 
-            candidates = [
-                [(int(idx), float(metrics[distance].distance(v, X_train[idx]))) for idx in single_results]  # noqa
-                for v, single_results in zip(X, results)
-            ]
+            if native_distances is not None:
+                candidates = [
+                    [(int(idx), float(dist)) for idx, dist in zip(single_results, single_distances)]
+                    for single_results, single_distances in zip(results, native_distances)
+                ]
+            else:
+                candidates = compute_candidates_with_distances(X_train, X, results, distance)
             return [(latency, v) for latency, v in zip(batch_latencies, candidates)]
 
         if batch:
@@ -223,9 +283,16 @@ def load_and_transform_dataset_lazy(dataset_name: str) -> Tuple[
     D, dimension = get_dataset(dataset_name)
     distance = D.attrs["distance"]
     point_type = D.attrs.get("point_type", "float")
+    external_base_override = os.environ.get("ANNB_EXTERNAL_BASE_U8BIN")
 
     test_source = D["test"]
-    if "external_base_u8bin" in D.attrs:
+    if external_base_override:
+        train_shape = (
+            int(D["train"].shape[0]),
+            int(D["train"].shape[1]),
+        )
+        X_train = LazyU8BinArray(external_base_override, *train_shape)
+    elif "external_base_u8bin" in D.attrs:
         train_shape = (
             int(D.attrs["external_train_count"]),
             int(D.attrs["external_train_dimension"]),

@@ -21,19 +21,23 @@ float:
               pivot_graph_degree: 32
               pivot_graph_l_build: 50
             search_params:
-              - minibatch: 1
-                thread: 1
+              - minibatch: 64
+                thread: 40
                 ctx_per_thread: 1
-                ef_search: 40
-              - minibatch: 32
-                thread: 1
-                ctx_per_thread: 1
-                ef_search: 40
+                ef_search: 30
               - minibatch: 256
-                thread: 1
+                thread: 40
                 ctx_per_thread: 1
-                ef_search: 40
-        query_args: [[20, 30, 40, 50, 80, 100]]
+                ef_search: 30
+              - minibatch: 1024
+                thread: 40
+                ctx_per_thread: 1
+                ef_search: 30
+              - minibatch: 10000
+                thread: 40
+                ctx_per_thread: 1
+                ef_search: 30
+        query_args: [[30]]
 uint8:
   euclidean:
   - base_args:
@@ -57,20 +61,20 @@ uint8:
               pivot_graph_degree: 32
               pivot_graph_l_build: 50
             search_params:
-              - minibatch: 1
-                thread: 1
+              - minibatch: 64
+                thread: 40
                 ctx_per_thread: 1
-                ef_search: 40
-              - minibatch: 32
-                thread: 1
-                ctx_per_thread: 1
-                ef_search: 40
+                ef_search: 30
               - minibatch: 256
-                thread: 1
+                thread: 40
                 ctx_per_thread: 1
-                ef_search: 40
-              - minibatch: 1120
-                thread: 1
+                ef_search: 30
+              - minibatch: 1024
+                thread: 40
                 ctx_per_thread: 1
-                ef_search: 40
-        query_args: [[20, 30, 40, 50, 80, 100]]
+                ef_search: 30
+              - minibatch: 10000
+                thread: 40
+                ctx_per_thread: 1
+                ef_search: 30
+        query_args: [[30]]

@@ -600,7 +600,7 @@ def coco(out_fn: str, kind: str):
 def external_hdf5_dataset(out_fn: str) -> None:
     raise RuntimeError(
         f"Expected prebuilt dataset at {out_fn}. "
-        "Generate it first with scripts/convert_sift100m_to_hdf5.py"
+        "Generate it first with the matching conversion script under scripts/."
     )
 
 
@@ -625,6 +625,7 @@ DATASETS: Dict[str, Callable[[str], None]] = {
     "sift-128-euclidean": sift,
     "sift100m-128-euclidean": external_hdf5_dataset,
     "sift100m-128-euclidean-float": external_hdf5_dataset,
+    "sift1b-128-euclidean": external_hdf5_dataset,
     "nytimes-256-angular": lambda out_fn: nytimes(out_fn, 256),
     "nytimes-16-angular": lambda out_fn: nytimes(out_fn, 16),
     "word2bits-800-hamming": lambda out_fn: word2bits(out_fn, "400K", "w2b_bitlevel1_size800_vocab400K"),

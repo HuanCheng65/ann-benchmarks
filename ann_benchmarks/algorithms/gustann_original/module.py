@@ -22,16 +22,19 @@ class GustannOriginal(GustannBase):
         query_suffix = ".bvecs" if self._data_type == "uint8" else ".fvecs"
         query_file = self._workdir / f"queries_0000{query_suffix}"
         output_ids = self._workdir / "result_ids_0000.bin"
+        output_distances = self._workdir / "result_distances_0000.bin"
         self._write_bvecs_or_fvecs(query_file, X)
         if output_ids.exists():
             output_ids.unlink()
+        if output_distances.exists():
+            output_distances.unlink()
 
         cmd = [
             str(self._gustann_home / "build/bin/search_disk_hybrid_bench"),
             "--query", str(query_file),
             "--index", str(self._index_file),
             "--pq_data", str(self._pq_prefix),
-            "--nav_graph", str(self._nav_prefix),
+            "--nav_graph", str(self._index_dir),
             "--data_type", self._data_type,
             "--io_backend", "memory",
             "--topk", str(n),
@@ -40,11 +43,13 @@ class GustannOriginal(GustannBase):
             "-T", str(self._search_params.get("thread", 1)),
             "-C", str(self._search_params.get("ctx_per_thread", 1)),
             "--output_ids", str(output_ids),
+            "--output_distances", str(output_distances),
         ]
 
         output = self._run(cmd, cwd=self._gustann_home)
         self._set_batch_latency_from_output(output, len(X))
         self._batch_results = self._read_ids(output_ids, n)
+        self._batch_distances = self._read_distances(output_distances, n)
         if len(self._batch_results) != len(X):
             raise RuntimeError(
                 "Expected "

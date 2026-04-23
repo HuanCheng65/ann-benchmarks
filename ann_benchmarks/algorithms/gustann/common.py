@@ -11,6 +11,20 @@ import numpy as np
 from ..base.module import BaseANN
 
 
+RUNTIME_INDEX_FILENAMES = (
+    "ann_disk.index",
+    "ann_pq_compressed.bin",
+    "ann_pq_pivots.bin",
+    "ann_disk.index_centroids.bin",
+    "ann_disk.index_medoids.bin",
+    "nav_data.bin",
+    "nav_index",
+    "nav_index.data",
+    "nav_index.tags",
+    "map.txt",
+)
+
+
 class GustannBase(BaseANN):
     default_home = None
     repo_guess_name = None
@@ -30,12 +44,15 @@ class GustannBase(BaseANN):
         self._workdir = None
         self._data_type = None
         self._batch_results = None
+        self._batch_distances = None
         self._batch_latencies = None
         self._best_search_time_override = None
         self._index_file = None
         self._index_prefix = None
         self._pq_prefix = None
         self._nav_prefix = None
+        self._index_dir = None
+        self._runtime_index_dir = None
         self.name = algorithm_name
 
     def fit(self, X):
@@ -50,28 +67,38 @@ class GustannBase(BaseANN):
             raise ValueError(f"Unsupported dtype for {self._algorithm_name}: {X.dtype}")
 
         self._data_type = data_type
-        X = np.ascontiguousarray(X)
-        dataset_hash = hashlib.sha256(X.view(np.uint8)).hexdigest()[:16]
+        configured_runtime_index_dir = self._resolve_runtime_index_dir()
+        if configured_runtime_index_dir is None:
+            X = np.ascontiguousarray(X)
+            dataset_hash = hashlib.sha256(X.view(np.uint8)).hexdigest()[:16]
+        else:
+            dataset_hash = hashlib.sha256(str(configured_runtime_index_dir).encode("utf-8")).hexdigest()[:16]
         self._workdir = self._root / dataset_hash
         self._workdir.mkdir(parents=True, exist_ok=True)
 
         base_bin = self._workdir / "base.bin"
         index_prefix = self._workdir / "ann"
         nav_prefix = self._workdir / "nav_index"
-        self._write_diskann_bin(base_bin, X)
+        if configured_runtime_index_dir is None:
+            self._write_diskann_bin(base_bin, X)
 
-        index_file = Path(str(index_prefix) + "_disk.index")
-        pq_prefix = Path(str(index_prefix) + "_pq")
-        if not index_file.exists():
-            self._run_diskann_build(base_bin, index_prefix, data_type)
-        if not nav_prefix.exists():
-            self._run_nav_build(base_bin, nav_prefix, data_type, X.shape[0])
+            index_file = Path(str(index_prefix) + "_disk.index")
+            if not index_file.exists():
+                self._run_diskann_build(base_bin, index_prefix, data_type)
+            if not nav_prefix.exists():
+                self._run_nav_build(base_bin, nav_prefix, data_type, X.shape[0])
+            runtime_index_dir = self._workdir
+        else:
+            runtime_index_dir = configured_runtime_index_dir
+        runtime_index_prefix = runtime_index_dir / "ann"
+        runtime_nav_prefix = runtime_index_dir / "nav_index"
 
-        self._index_file = index_file
-        self._index_prefix = index_prefix
-        self._pq_prefix = pq_prefix
-        self._nav_prefix = nav_prefix
-        self._index_dir = self._workdir
+        self._runtime_index_dir = runtime_index_dir
+        self._index_file = Path(str(runtime_index_prefix) + "_disk.index")
+        self._index_prefix = runtime_index_prefix
+        self._pq_prefix = Path(str(runtime_index_prefix) + "_pq")
+        self._nav_prefix = runtime_nav_prefix
+        self._index_dir = runtime_index_dir
         self._refresh_name()
 
     def set_query_arguments(self, ef_search):
@@ -80,6 +107,9 @@ class GustannBase(BaseANN):
 
     def get_batch_results(self):
         return self._batch_results
+
+    def get_batch_distances(self):
+        return self._batch_distances
 
     def get_batch_latencies(self):
         return self._batch_latencies
@@ -95,6 +125,20 @@ class GustannBase(BaseANN):
 
     def _io_backend_name(self):
         return "memory"
+
+    def _resolve_runtime_index_dir(self):
+        override = self._index_params.get("index_dir_override") or os.environ.get("ANNB_INDEX_DIR_OVERRIDE")
+        if not override:
+            return None
+
+        runtime_index_dir = Path(override).expanduser().resolve()
+        missing = [name for name in RUNTIME_INDEX_FILENAMES if not (runtime_index_dir / name).exists()]
+        if missing:
+            missing_display = ", ".join(str(runtime_index_dir / name) for name in missing)
+            raise FileNotFoundError(
+                f"Missing runtime index files for {self._algorithm_name}: {missing_display}"
+            )
+        return runtime_index_dir
 
     def _run_diskann_build(self, base_bin, index_prefix, data_type):
         diskann_dir = self._gustann_home / "deps/DiskANN/build/apps"
@@ -198,6 +242,17 @@ class GustannBase(BaseANN):
                 unique.append(idx)
             deduped.append(unique)
         return deduped
+
+    def _read_distances(self, path, expected_topk):
+        with open(path, "rb") as f:
+            num_queries, topk = struct.unpack("ii", f.read(8))
+            if topk != expected_topk:
+                raise RuntimeError(f"Unexpected topk in distance file: {topk} != {expected_topk}")
+            distances = np.frombuffer(f.read(), dtype=np.float32)
+        distances = distances.reshape((num_queries, topk))
+        if self._metric == "euclidean":
+            distances = np.sqrt(np.maximum(distances, 0.0), dtype=np.float32)
+        return distances.tolist()
 
     def _run(self, cmd, cwd):
         env = os.environ.copy()
